@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
+<title>Running Riot - Monkey Chase</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden;background:#08111f;font-family:Arial,sans-serif}
+#game{position:relative;width:100%;height:100%;overflow:hidden;background:linear-gradient(#182d4d 0%,#77b8d4 52%,#263746 52%,#111 100%)}
+.sky{position:absolute;inset:0 0 48% 0;background:linear-gradient(#10223c,#78bfd7)}
+.sun{position:absolute;width:90px;height:90px;border-radius:50%;background:#ffd96a;right:12%;top:10%;box-shadow:0 0 45px #ffd96a}
+.city{position:absolute;bottom:43%;width:100%;height:22%;display:flex;align-items:end;gap:4px;padding:0 5px}
+.building{background:#263b53;border:2px solid #1b2b3e;flex:1;min-width:35px;position:relative}
+.building:nth-child(2n){height:75%}.building:nth-child(3n){height:100%}.building:nth-child(5n){height:60%}
+.building:after{content:"";position:absolute;inset:8px;background:repeating-linear-gradient(90deg,#ffd66b 0 6px,transparent 6px 14px),repeating-linear-gradient(#ffd66b 0 6px,transparent 6px 15px);opacity:.45}
+.road{position:absolute;bottom:0;left:-10%;width:120%;height:49%;background:#24272b;clip-path:polygon(28% 0,72% 0,100% 100%,0 100%)}
+.lane{position:absolute;bottom:0;left:50%;width:7px;height:100%;background:repeating-linear-gradient(to bottom,transparent 0 35px,#f4d35e 35px 80px);transform:translateX(-50%);opacity:.8}
+.rail{position:absolute;bottom:0;height:44%;width:8px;background:#777;z-index:2}
+.rail.l{left:17%}.rail.r{right:17%}
+.track{position:absolute;bottom:0;left:12%;right:12%;height:42%;border-top:5px solid #aaa;border-bottom:5px solid #aaa;z-index:2;opacity:.7}
+.player,.monkey{position:absolute;z-index:8;font-size:64px;filter:drop-shadow(0 7px 4px #0008);transition:left .12s}
+.player{bottom:16%;left:50%;transform:translateX(-50%)}
+.monkey{bottom:8%;left:50%;transform:translateX(-50%);font-size:58px;opacity:.95}
+.obstacle{position:absolute;z-index:7;font-size:48px;bottom:16%;transition:left .12s}
+.coin{position:absolute;z-index:6;font-size:32px;color:#ffd43b;text-shadow:0 0 12px #ffd43b}
+#hud{position:absolute;z-index:20;top:12px;left:12px;right:12px;display:flex;justify-content:space-between;color:#fff;font-weight:bold;text-shadow:0 2px 4px #000}
+.card{background:#0008;padding:9px 13px;border-radius:14px;backdrop-filter:blur(5px)}
+#menu{position:absolute;z-index:30;inset:0;display:flex;align-items:center;justify-content:center;background:#07101dcc}
+.panel{text-align:center;color:white;background:#101b2df2;border:1px solid #ffffff22;border-radius:24px;padding:28px;width:min(90%,390px);box-shadow:0 20px 70px #0009}
+h1{font-size:42px;color:#ffd43b;margin-bottom:8px}
+p{color:#c9d4e4;margin-bottom:20px}
+button{border:0;border-radius:15px;padding:14px 28px;font-size:18px;font-weight:bold;background:#ffcc33;color:#161616;cursor:pointer}
+#touch{position:absolute;z-index:25;bottom:15px;left:0;right:0;height:35%;display:flex;justify-content:space-between;pointer-events:none}
+.touchzone{width:50%;pointer-events:auto}
+#jump{position:absolute;z-index:26;bottom:20px;left:50%;transform:translateX(-50%);font-size:13px;color:#fff;background:#0005;padding:10px 18px;border-radius:20px}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<div id="game">
+  <div class="sky"></div><div class="sun"></div><div class="city" id="city"></div>
+  <div class="road"></div><div class="lane"></div><div class="rail l"></div><div class="rail r"></div><div class="track"></div>
+  <div id="hud">
+    <div class="card">🏆 Score: <span id="score">0</span></div>
+    <div class="card">🪙 Coins: <span id="coins">0</span></div>
+  </div>
+  <div id="player" class="player">🏃</div>
+  <div id="monkey" class="monkey">🐒</div>
+  <div id="objects"></div>
+  <div id="touch"><div class="touchzone" id="left"></div><div class="touchzone" id="right"></div></div>
+  <div id="jump">Tap left/right to move • swipe up or tap bottom-center to jump</div>
+  <div id="menu">
+    <div class="panel">
+      <h1>RUNNING RIOT</h1>
+      <p>🐒 Monkey Chase Runner<br>City • Railway • Coins • Obstacles</p>
+      <button id="start">▶ PLAY NOW</button>
+    </div>
+  </div>
+</div>
+<script>
+const player=document.getElementById('player'), monkey=document.getElementById('monkey');
+const objects=document.getElementById('objects'), scoreEl=document.getElementById('score'), coinsEl=document.getElementById('coins');
+const menu=document.getElementById('menu'), start=document.getElementById('start');
+const lanes=[25,50,75]; let lane=1, score=0, coins=0, running=false, speed=5, jumping=false, last=0, spawn=0;
+for(let i=0;i<14;i++){let b=document.createElement('div');b.className='building';document.getElementById('city').appendChild(b)}
+function setLane(el){el.style.left=lanes[lane]+'%'}
+function move(dir){if(!running)return;lane=Math.max(0,Math.min(2,lane+dir));setLane(player)}
+function jump(){
+ if(!running||jumping)return;jumping=true;player.style.bottom='32%';
+ setTimeout(()=>{player.style.bottom='16%'},430);
+ setTimeout(()=>{jumping=false},470);
+}
+function spawnObject(){
+ let o=document.createElement('div');let isCoin=Math.random()<.38;
+ o.className=isCoin?'coin obstacle':'obstacle';o.textContent=isCoin?'🪙':(Math.random()<.5?'🚗':'🚧');
+ o.dataset.lane=Math.floor(Math.random()*3);o.style.left=lanes[o.dataset.lane]+'%';o.style.bottom=isCoin?'30%':'16%';o.dataset.y=0;objects.appendChild(o);
+}
+function loop(t){
+ if(!running)return; if(!last)last=t; let dt=Math.min(32,t-last);last=t;
+ spawn+=dt;if(spawn>Math.max(420,900-score*1.2)){spawnObject();spawn=0}
+ score+=dt*0.018;scoreEl.textContent=Math.floor(score);
+ if(score%250<1)speed=Math.min(12,speed+.15);
+ [...objects.children].forEach(o=>{
+   let y=+(o.dataset.y||0)+speed*dt/8;o.dataset.y=y;o.style.transform=`translateY(${y}px)`;
+   if(y>innerHeight*.72){o.remove();return}
+   if(y>innerHeight*.45&&y<innerHeight*.67&&+o.dataset.lane===lane&&!jumping){
+     if(o.classList.contains('coin')){coins++;coinsEl.textContent=coins;o.remove()}
+     else{running=false;menu.classList.remove('hidden');menu.querySelector('p').innerHTML='💥 GAME OVER<br>Score: '+Math.floor(score)+' • Coins: '+coins;start.textContent='↻ PLAY AGAIN'}
+   }
+ });
+ monkey.style.left=(50+Math.sin(t/300)*2)+'%';
+ requestAnimationFrame(loop);
+}
+function startGame(){score=0;coins=0;speed=5;lane=1;setLane(player);objects.innerHTML='';scoreEl.textContent=0;coinsEl.textContent=0;running=true;last=0;menu.classList.add('hidden');requestAnimationFrame(loop)}
+start.onclick=startGame;
+document.getElementById('left').onclick=()=>move(-1);document.getElementById('right').onclick=()=>move(1);
+document.addEventListener('keydown',e=>{if(e.key==='ArrowLeft'||e.key==='a')move(-1);if(e.key==='ArrowRight'||e.key==='d')move(1);if(e.key==='ArrowUp'||e.key===' ')jump()});
+let sy=0;document.addEventListener('touchstart',e=>{sy=e.touches[0].clientY},{passive:true});
+document.addEventListener('touchend',e=>{let dy=e.changedTouches[0].clientY-sy;if(dy<-50)jump()},{passive:true});
+setLane(player);
+</script>
+</body>
+  </html>
